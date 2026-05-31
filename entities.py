@@ -3,7 +3,8 @@ import pygame
 import random
 import math
 from settings import *
-from draw_utils import draw_minifigure, draw_lego_piece, draw_gold_brick, draw_stud, draw_lego_brick
+from draw_utils import (draw_minifigure, draw_lego_piece, draw_gold_brick,
+                        draw_stud, draw_lego_brick, draw_force_effect)
 
 
 class Platform:
@@ -17,9 +18,13 @@ class Platform:
 
 
 class Player:
+    # Personaje más grande: 28x68
+    CHAR_W = 28
+    CHAR_H = 68
+
     def __init__(self, x, y, char_type=OBI_WAN):
         self.char_type = char_type
-        self.rect = pygame.Rect(x, y, 20, 44)
+        self.rect = pygame.Rect(x, y, self.CHAR_W, self.CHAR_H)
         self.vx = 0.0
         self.vy = 0.0
         self.on_ground = False
@@ -29,42 +34,46 @@ class Player:
         self.hp = 3
         self.max_hp = 3
         self.attack_timer = 0
-        self.inv_timer = 0     # invencibilidad tras daño
+        self.attack_id = 0          # incrementa con cada ataque nuevo
+        self.force_timer = 0        # cooldown de la Fuerza
+        self.force_active = 0       # frames que la onda de Fuerza está activa
+        self.inv_timer = 0
         self.pieces = 0
         self.studs = 0
         self.gold_bricks = 0
         self.dead = False
-        self.jump_count = 0
 
     def handle_input(self, keys):
         if self.dead:
             return
-        # Movimiento horizontal
         self.vx = 0
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+        if keys[pygame.K_LEFT]  or keys[pygame.K_a]:
             self.vx = -PLAYER_SPEED
             self.direction = -1
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
             self.vx = PLAYER_SPEED
             self.direction = 1
 
-        # Salto
         if (keys[pygame.K_SPACE] or keys[pygame.K_UP] or keys[pygame.K_w]):
             if self.on_ground:
                 self.vy = JUMP_VEL
                 self.on_ground = False
-                self.jump_count = 1
 
-        # Ataque
+        # Z / J → ataque con sable
         if (keys[pygame.K_z] or keys[pygame.K_j]) and self.attack_timer <= 0:
-            self.attack_timer = 20
+            self.attack_timer = 22
+            self.attack_id += 1
             self.state = 'attack'
+
+        # X → habilidad de la Fuerza (cooldown 90 frames)
+        if keys[pygame.K_x] and self.force_timer <= 0:
+            self.force_timer  = 90
+            self.force_active = 30
 
     def update(self, platforms):
         if self.dead:
             return
 
-        # Física
         self.vy += GRAVITY
         self.vy = min(self.vy, MAX_FALL)
 
@@ -75,19 +84,18 @@ class Player:
         self.on_ground = False
         self._collide_y(platforms)
 
-        # Límite inferior (no caer al vacío)
-        if self.rect.top > H + 50:
+        # Caída al vacío → daño y reaparecer
+        if self.rect.top > H + 60:
             self._take_damage()
-            self.rect.x = 100
-            self.rect.y = 400
+            self.rect.x = max(60, self.rect.x - 200)
+            self.rect.y = 300
             self.vy = 0
 
-        # Límite izquierdo
         if self.rect.left < 0:
             self.rect.left = 0
 
-        # Timers
         self.frame += 1
+
         if self.attack_timer > 0:
             self.attack_timer -= 1
             self.state = 'attack'
@@ -98,8 +106,9 @@ class Player:
         else:
             self.state = 'idle'
 
-        if self.inv_timer > 0:
-            self.inv_timer -= 1
+        if self.inv_timer   > 0: self.inv_timer   -= 1
+        if self.force_timer > 0: self.force_timer  -= 1
+        if self.force_active > 0: self.force_active -= 1
 
     def _collide_x(self, platforms):
         for p in platforms:
@@ -117,19 +126,31 @@ class Player:
                     self.rect.bottom = p.rect.top
                     self.vy = 0
                     self.on_ground = True
-                    self.jump_count = 0
                 elif self.vy < 0:
                     self.rect.top = p.rect.bottom
                     self.vy = 0
 
     def get_attack_rect(self):
-        """Rectángulo de golpe del sable."""
+        """Rect de golpe en COORDENADAS DE MUNDO."""
         if self.attack_timer <= 0:
-            return None
+            return None, -1
         if self.direction == 1:
-            return pygame.Rect(self.rect.right, self.rect.top + 10, 28, 16)
+            r = pygame.Rect(self.rect.right, self.rect.top + 12, 36, 20)
         else:
-            return pygame.Rect(self.rect.left - 28, self.rect.top + 10, 28, 16)
+            r = pygame.Rect(self.rect.left - 36, self.rect.top + 12, 36, 20)
+        return r, self.attack_id
+
+    def get_force_rect(self):
+        """Rect de empuje de la Fuerza (más largo que el sable)."""
+        if self.force_active <= 0:
+            return None
+        force_range = 170
+        if self.direction == 1:
+            return pygame.Rect(self.rect.right, self.rect.top - 10,
+                               force_range, self.CHAR_H + 20)
+        else:
+            return pygame.Rect(self.rect.left - force_range, self.rect.top - 10,
+                               force_range, self.CHAR_H + 20)
 
     def _take_damage(self):
         if self.inv_timer > 0:
@@ -141,11 +162,11 @@ class Player:
 
     def collect_piece(self, piece):
         self.pieces += 1
-        self.studs += 50
+        self.studs  += 50
 
     def collect_gold(self):
         self.gold_bricks += 1
-        self.studs += 500
+        self.studs       += 500
 
     def collect_stud(self, value):
         self.studs += value
@@ -161,12 +182,32 @@ class Player:
             return
 
         draw_minifigure(surf, screen_x, screen_y,
-                        self.char_type, self.direction, self.state, self.frame)
+                        self.char_type, self.direction, self.state, self.frame,
+                        scale=1.6)
+
+        # Efecto visual de la Fuerza
+        if self.force_active > 0:
+            draw_force_effect(surf, screen_x, screen_y - self.CHAR_H // 2,
+                              self.direction, self.force_active, self.char_type)
+
+        # Indicador cooldown Fuerza (barra pequeña debajo del personaje)
+        if self.force_timer > 0 and self.force_active <= 0:
+            cd_ratio = 1 - self.force_timer / 90
+            bar_w = 30
+            bx = int(screen_x - bar_w//2)
+            by = int(screen_y + 4)
+            pygame.draw.rect(surf, DARK_GREY, (bx, by, bar_w, 4), border_radius=2)
+            fill = int(bar_w * cd_ratio)
+            if fill > 0:
+                pygame.draw.rect(surf, SABER_BLUE, (bx, by, fill, 4), border_radius=2)
 
 
 class Stormtrooper:
+    CHAR_W = 22
+    CHAR_H = 68
+
     def __init__(self, x, y, patrol_dist=100):
-        self.rect = pygame.Rect(x, y, 18, 44)
+        self.rect = pygame.Rect(x, y, self.CHAR_W, self.CHAR_H)
         self.vx = 1.5
         self.vy = 0.0
         self.direction = 1
@@ -180,21 +221,32 @@ class Stormtrooper:
         self.death_timer = 0
         self.stud_drop = []
         self.hit_flash = 0
+        self.hit_inv_timer = 0      # invencibilidad post-golpe
+        self.last_hit_attack_id = -1  # evita doble-hit en el mismo swing
+        self.push_vx = 0.0         # empuje de la Fuerza
 
-    def update(self, platforms, player_attack_rect):
+    def update(self, platforms, attack_rect, attack_id, force_rect):
         if not self.alive:
             self.death_timer += 1
             return
 
-        # Patrulla
+        # Empuje de la Fuerza (decae rápido)
+        if abs(self.push_vx) > 0.1:
+            self.rect.x += int(self.push_vx)
+            self.push_vx *= 0.8
+        else:
+            self.push_vx = 0.0
+
+        # Patrulla normal
         self.vy += GRAVITY
         self.vy = min(self.vy, MAX_FALL)
 
-        if abs(self.rect.x - self.start_x) > self.patrol_dist:
-            self.vx *= -1
-            self.direction = int(self.vx / abs(self.vx))
+        if self.push_vx == 0.0:
+            if abs(self.rect.x - self.start_x) > self.patrol_dist:
+                self.vx = -self.vx
+                self.direction = int(self.vx / abs(self.vx))
+            self.rect.x += int(self.vx)
 
-        self.rect.x += int(self.vx)
         self._collide_x(platforms)
         self.rect.y += int(self.vy)
         self.on_ground = False
@@ -202,19 +254,31 @@ class Stormtrooper:
 
         self.frame += 1
         self.state = 'walk'
-        if self.hit_flash > 0:
-            self.hit_flash -= 1
 
-        # Recibir ataque
-        if player_attack_rect and self.rect.colliderect(player_attack_rect):
+        if self.hit_flash   > 0: self.hit_flash   -= 1
+        if self.hit_inv_timer > 0: self.hit_inv_timer -= 1
+
+        # Recibir golpe de sable
+        if (attack_rect is not None
+                and self.hit_inv_timer <= 0
+                and attack_id != self.last_hit_attack_id
+                and self.rect.colliderect(attack_rect)):
             self._hit()
+            self.last_hit_attack_id = attack_id
+
+        # Recibir empuje de la Fuerza
+        if force_rect is not None and self.rect.colliderect(force_rect):
+            # Determinar dirección del empuje
+            force_dir = 1 if force_rect.centerx < self.rect.centerx else -1
+            self.push_vx = force_dir * 12
+            self.hit_flash = 15
 
     def _hit(self):
         self.hp -= 1
-        self.hit_flash = 10
+        self.hit_flash = 12
+        self.hit_inv_timer = 25
         if self.hp <= 0:
             self.alive = False
-            # Soltar studs
             for _ in range(3):
                 self.stud_drop.append(
                     FlyingStud(self.rect.centerx, self.rect.centery, 100)
@@ -223,7 +287,7 @@ class Stormtrooper:
     def _collide_x(self, platforms):
         for p in platforms:
             if self.rect.colliderect(p.rect):
-                self.vx *= -1
+                self.vx = -self.vx
                 self.direction *= -1
                 if self.vx > 0:
                     self.rect.left = p.rect.right
@@ -247,7 +311,6 @@ class Stormtrooper:
 
         if not self.alive:
             if self.death_timer < 40:
-                # Explosión en piezas
                 for i in range(6):
                     angle = i * 60 + self.death_timer * 5
                     px = sx + int(math.cos(math.radians(angle)) * self.death_timer * 1.5)
@@ -257,13 +320,22 @@ class Stormtrooper:
             return
 
         draw_minifigure(surf, sx, sy, STORMTROOPER,
-                        self.direction, self.state, self.frame)
+                        self.direction, self.state, self.frame, scale=1.6)
 
-        # Flash de golpe
         if self.hit_flash > 0:
-            flash = pygame.Surface((self.rect.w, self.rect.h), pygame.SRCALPHA)
-            flash.fill((255, 255, 255, 120))
-            surf.blit(flash, (sx - self.rect.w//2, sy - self.rect.h))
+            flash = pygame.Surface((self.rect.w + 10, self.rect.h), pygame.SRCALPHA)
+            flash.fill((255, 255, 255, 130))
+            surf.blit(flash, (sx - self.rect.w//2 - 5, sy - self.rect.h))
+
+        # Barra de vida sobre el enemigo
+        bw = 24
+        bx = sx - bw//2
+        by = sy - self.rect.h - 8
+        pygame.draw.rect(surf, DARK_GREY, (bx, by, bw, 4))
+        fill = int(bw * self.hp / 2)
+        if fill > 0:
+            pygame.draw.rect(surf, RED, (bx, by, fill, 4))
+        pygame.draw.rect(surf, GREY, (bx, by, bw, 4), 1)
 
 
 class LegoPiece:
@@ -306,11 +378,10 @@ class GoldBrick:
         sx = self.rect.x - cam_x
         sy = self.rect.y + int(math.sin(self.frame * 0.04) * 5)
         draw_gold_brick(surf, sx, sy, self.frame)
-        # Rayos dorados
         if self.frame % 30 < 5:
             for angle in range(0, 360, 45):
                 ex = sx + 10 + int(math.cos(math.radians(angle)) * 14)
-                ey = sy + 6 + int(math.sin(math.radians(angle)) * 14)
+                ey = sy + 6  + int(math.sin(math.radians(angle)) * 14)
                 pygame.draw.line(surf, GOLD, (sx+10, sy+6), (ex, ey), 1)
 
     def check_collect(self, player):
@@ -321,7 +392,6 @@ class GoldBrick:
 
 
 class FlyingStud:
-    """Stud que vuela hacia el jugador tras matar enemigo."""
     def __init__(self, x, y, value=10):
         self.x = float(x)
         self.y = float(y)
@@ -334,14 +404,12 @@ class FlyingStud:
     def update(self, player):
         if self.collected:
             return
-        # Gravedad inicial luego atracción al jugador
         self.life -= 1
         if self.life > 80:
             self.vy += 0.3
         else:
-            # Atracción magnética
             dx = player.rect.centerx - self.x
-            dy = player.rect.centery - self.y
+            dy = player.rect.centery  - self.y
             dist = max(1, math.hypot(dx, dy))
             self.vx += dx / dist * 2
             self.vy += dy / dist * 2
