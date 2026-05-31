@@ -425,6 +425,7 @@ class Level1Scene:
             e.pending_shots.clear()
 
         # ── Mover disparos de Stormtroopers ──
+        SHOT_RANGE = 160   # píxeles máximos que viaja el láser
         for shot in self.enemy_shots:
             shot['x'] += shot['vx']
         # Colisión disparo → jugador
@@ -434,9 +435,10 @@ class Level1Scene:
                 if sr.colliderect(self.player.rect):
                     self.player._take_damage()
                     self.enemy_shots.remove(shot)
-        # Eliminar disparos fuera del nivel
+        # Eliminar disparos que superaron el alcance máximo o salieron del nivel
         self.enemy_shots = [s for s in self.enemy_shots
-                            if 0 <= s['x'] <= self.LEVEL_W]
+                            if abs(s['x'] - s['origin_x']) < SHOT_RANGE
+                            and 0 <= s['x'] <= self.LEVEL_W]
 
         for s in self.flying_studs:
             s.update(self.player)

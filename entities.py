@@ -4,7 +4,8 @@ import random
 import math
 from settings import *
 from draw_utils import (draw_minifigure, draw_lego_piece, draw_gold_brick,
-                        draw_stud, draw_lego_brick, draw_force_effect)
+                        draw_stud, draw_lego_brick, draw_force_effect,
+                        lighter)
 
 
 class Platform:
@@ -291,9 +292,10 @@ class Stormtrooper:
             else:
                 shot_dir = self.direction
             self.pending_shots.append({
-                'x': float(self.rect.centerx),
-                'y': float(self.rect.centery - 10),
-                'vx': shot_dir * 7.0,
+                'x':       float(self.rect.centerx),
+                'y':       float(self.rect.centery - 10),
+                'vx':      shot_dir * 7.0,
+                'origin_x': float(self.rect.centerx),  # para calcular distancia
             })
 
         # Recibir golpe de sable
@@ -365,10 +367,11 @@ class Stormtrooper:
             flash.fill((255, 255, 255, 130))
             surf.blit(flash, (sx - self.rect.w//2 - 5, sy - self.rect.h))
 
-        # Barra de vida — bien por encima del personaje
+        # Barra de vida — encima de la cabeza visual (el personaje visual
+        # es más alto que self.rect porque escala=1.6, ~105px total)
         bw = 28
         bx = sx - bw//2
-        bar_y = sy - self.rect.h - 22   # 22px por encima de la cabeza
+        bar_y = sy - 115   # por encima del stud de la cabeza
         pygame.draw.rect(surf, DARK_GREY, (bx, bar_y, bw, 5), border_radius=2)
         fill = int(bw * max(0, self.hp) / 2)
         if fill > 0:
