@@ -156,10 +156,13 @@ def draw_minifigure(surf, cx, by, char_type, direction=1,
     head_cy = by - LH - BH - RH - int(2*S)
     _draw_head(surf, cx, head_cy, RH, cfg, char_type, S)
 
-    # Stud encima de cabeza (icónico Lego)
+    # Stud encima de cabeza (cilindro pequeño como el real)
     stud_c = lighter(cfg.get('hair') or cfg['head'], 40)
-    pygame.draw.ellipse(surf, stud_c, (cx - int(4*S), head_cy - RH - int(5*S), int(8*S), int(7*S)))
-    pygame.draw.ellipse(surf, darker(stud_c, 30), (cx - int(4*S), head_cy - RH - int(5*S), int(8*S), int(7*S)), 1)
+    stud_top = head_cy - RH + int(1*S)   # justo encima del cilindro
+    pygame.draw.ellipse(surf, stud_c,           (cx - int(4*S), stud_top - int(7*S), int(9*S), int(7*S)))
+    pygame.draw.ellipse(surf, darker(stud_c, 30),(cx - int(4*S), stud_top - int(7*S), int(9*S), int(7*S)), 1)
+    # Pequeño cilindro del stud
+    pygame.draw.rect(surf, stud_c, (cx - int(3*S), stud_top - int(5*S), int(7*S), int(4*S)))
 
 
 def _draw_saber(surf, hx, hy, direction, color, state, S=1.0):
@@ -178,40 +181,58 @@ def _draw_saber(surf, hx, hy, direction, color, state, S=1.0):
 
 
 def _draw_head(surf, cx, cy, r, cfg, char_type, S=1.0):
+    """
+    Cabeza CILÍNDRICA como la minifigura Lego real.
+    En 2D se ve como un rectángulo con esquinas ligeramente redondeadas,
+    más ancho que alto — igual que el cilindro real visto de frente.
+    """
     helmet = cfg.get('helmet')
 
+    # Dimensiones del cilindro: más ancho que alto
+    HW = int(r * 2 + 4 * S)   # ancho del cilindro
+    HH = int(r * 2 - 2 * S)   # alto del cilindro (ligeramente menos)
+    br = int(4 * S)             # border_radius pequeño (cilindro, no esfera)
+    hx = cx - HW // 2
+    hy = cy - HH // 2
+
     if helmet == 'vader':
-        # Casco icónico Vader en negro
+        # ── Casco Vader: cilindro negro con domo encima ──
+        # Domo superior redondeado
+        dome_h = int(r * 1.4)
         pygame.draw.ellipse(surf, BLACK,
-                            (cx - r - int(3*S), cy - r - int(6*S),
-                             (r + int(3*S))*2, r*2 + int(8*S)))
-        pts = [(cx-r, cy), (cx-r+int(4*S), cy+r+int(3*S)),
-               (cx+r-int(4*S), cy+r+int(3*S)), (cx+r, cy)]
-        pygame.draw.polygon(surf, BLACK, pts)
-        # Lentes plateados
-        pygame.draw.ellipse(surf, DARK_GREY, (cx - int(8*S), cy, int(10*S), int(7*S)))
-        pygame.draw.ellipse(surf, DARK_GREY, (cx + int(2*S), cy, int(10*S), int(7*S)))
-        pygame.draw.ellipse(surf, lighter(DARK_GREY, 40), (cx - int(7*S), cy+int(1*S), int(6*S), int(4*S)))
-        pygame.draw.ellipse(surf, lighter(DARK_GREY, 40), (cx + int(3*S), cy+int(1*S), int(6*S), int(4*S)))
-        # Respirador
+                            (hx - int(3*S), hy - dome_h, HW + int(6*S), dome_h * 2))
+        # Cuerpo del casco (cilindro)
+        pygame.draw.rect(surf, BLACK, (hx - int(2*S), hy, HW + int(4*S), HH + int(4*S)),
+                         border_radius=int(3*S))
+        # Lentes grises (forma trapezoidal/ojo)
+        pygame.draw.ellipse(surf, DARK_GREY, (cx - int(9*S), hy + int(3*S), int(9*S), int(7*S)))
+        pygame.draw.ellipse(surf, DARK_GREY, (cx + int(1*S), hy + int(3*S), int(9*S), int(7*S)))
+        pygame.draw.ellipse(surf, lighter(DARK_GREY, 40), (cx - int(8*S), hy + int(4*S), int(5*S), int(4*S)))
+        pygame.draw.ellipse(surf, lighter(DARK_GREY, 40), (cx + int(2*S), hy + int(4*S), int(5*S), int(4*S)))
+        # Panel respirador en la parte de abajo
+        pygame.draw.rect(surf, darker(DARK_GREY, 30),
+                         (cx - int(8*S), hy + HH - int(5*S), int(16*S), int(5*S)))
         for i in range(4):
             pygame.draw.rect(surf, DARK_GREY,
-                             (cx - int(6*S) + i*int(3*S), cy + r, int(2*S), int(4*S)),
+                             (cx - int(6*S) + i * int(3*S), hy + HH - int(4*S), int(2*S), int(4*S)),
                              border_radius=1)
-        pygame.draw.rect(surf, darker(DARK_GREY, 30),
-                         (cx - int(8*S), cy + r - int(2*S), int(16*S), int(3*S)))
 
     elif helmet == 'trooper':
-        # Stormtrooper - casco blanco redondeado
-        pygame.draw.ellipse(surf, WHITE, (cx-r, cy-r//3, r*2, r*2+int(4*S)))
-        # Barbilla
-        pygame.draw.rect(surf, WHITE,   (cx - int(7*S), cy+r-int(3*S), int(14*S), int(6*S)), border_radius=int(3*S))
-        # Lentes negros alargados
-        pygame.draw.ellipse(surf, BLACK, (cx-r+int(2*S), cy+int(1*S), int(9*S), int(7*S)))
-        pygame.draw.ellipse(surf, BLACK, (cx+int(1*S),   cy+int(1*S), int(9*S), int(7*S)))
-        # Brillo en lentes
-        pygame.draw.ellipse(surf, (60,60,80), (cx-r+int(3*S), cy+int(2*S), int(4*S), int(3*S)))
-        pygame.draw.ellipse(surf, (60,60,80), (cx+int(2*S),   cy+int(2*S), int(4*S), int(3*S)))
+        # ── Casco Stormtrooper: cilindro blanco con detalles negros ──
+        # Casco base (cilindro blanco con tope redondeado)
+        pygame.draw.rect(surf, WHITE, (hx, hy, HW, HH), border_radius=int(5*S))
+        # Cúpula superior
+        pygame.draw.ellipse(surf, WHITE, (hx, hy - int(4*S), HW, int(10*S)))
+        # Visor negro trapezoidal (dos lentes)
+        pygame.draw.ellipse(surf, BLACK, (hx + int(2*S), hy + int(2*S), int(9*S), int(7*S)))
+        pygame.draw.ellipse(surf, BLACK, (cx + int(1*S),  hy + int(2*S), int(9*S), int(7*S)))
+        pygame.draw.ellipse(surf, (50,50,70), (hx + int(3*S), hy + int(3*S), int(5*S), int(4*S)))
+        pygame.draw.ellipse(surf, (50,50,70), (cx + int(2*S),  hy + int(3*S), int(5*S), int(4*S)))
+        # Ventilación inferior
+        for i in range(3):
+            pygame.draw.line(surf, GREY,
+                             (cx - int(4*S) + i * int(4*S), hy + HH - int(5*S)),
+                             (cx - int(4*S) + i * int(4*S), hy + HH - int(1*S)), int(1*S))
         # Ventilación
         for i in range(3):
             pygame.draw.line(surf, GREY,
@@ -219,78 +240,85 @@ def _draw_head(surf, cx, cy, r, cfg, char_type, S=1.0):
                              (cx-int(3*S)+i*int(3*S), cy+r+int(5*S)), 1)
 
     elif helmet == 'yoda':
-        # Cabeza verde con orejas enormes
-        pygame.draw.circle(surf, cfg['head'], (cx, cy), r)
-        # Orejas grandes (característica de Yoda)
-        ear_pts_l = [(cx-r, cy-int(2*S)), (cx-r-int(12*S), cy-int(8*S)),
-                     (cx-r-int(10*S), cy+int(8*S)), (cx-r+int(2*S), cy+int(4*S))]
-        ear_pts_r = [(cx+r, cy-int(2*S)), (cx+r+int(12*S), cy-int(8*S)),
-                     (cx+r+int(10*S), cy+int(8*S)), (cx+r-int(2*S), cy+int(4*S))]
+        # ── Yoda: cilindro verde con orejas enormes ──
+        pygame.draw.rect(surf, cfg['head'], (hx, hy, HW, HH), border_radius=br)
+        pygame.draw.rect(surf, darker(cfg['head'], 15), (hx, hy, HW, HH), 1, border_radius=br)
+        # Orejas grandes
+        ear_pts_l = [(hx, hy+HH//2-int(2*S)), (hx-int(14*S), hy+HH//4),
+                     (hx-int(12*S), hy+HH-int(4*S)), (hx+int(2*S), hy+HH-int(2*S))]
+        ear_pts_r = [(hx+HW, hy+HH//2-int(2*S)), (hx+HW+int(14*S), hy+HH//4),
+                     (hx+HW+int(12*S), hy+HH-int(4*S)), (hx+HW-int(2*S), hy+HH-int(2*S))]
         pygame.draw.polygon(surf, cfg['head'], ear_pts_l)
         pygame.draw.polygon(surf, cfg['head'], ear_pts_r)
-        pygame.draw.polygon(surf, darker(cfg['head'],20), ear_pts_l, 1)
-        pygame.draw.polygon(surf, darker(cfg['head'],20), ear_pts_r, 1)
-        # Ojos grandes sabios
-        pygame.draw.circle(surf, darker(cfg['head'], 70), (cx-int(4*S), cy-int(1*S)), int(3*S))
-        pygame.draw.circle(surf, darker(cfg['head'], 70), (cx+int(4*S), cy-int(1*S)), int(3*S))
-        pygame.draw.circle(surf, lighter(cfg['head'],60), (cx-int(3*S), cy-int(2*S)), int(1*S))
-        pygame.draw.circle(surf, lighter(cfg['head'],60), (cx+int(5*S), cy-int(2*S)), int(1*S))
-        # Arrugas / pelo blanco escaso
-        pygame.draw.arc(surf, (210,210,195),
-                        pygame.Rect(cx-r+int(2*S), cy-r, r*2-int(4*S), r),
+        pygame.draw.polygon(surf, darker(cfg['head'], 25), ear_pts_l, 1)
+        pygame.draw.polygon(surf, darker(cfg['head'], 25), ear_pts_r, 1)
+        # Ojos
+        pygame.draw.circle(surf, darker(cfg['head'], 70), (cx-int(4*S), hy+HH//2-int(1*S)), int(3*S))
+        pygame.draw.circle(surf, darker(cfg['head'], 70), (cx+int(4*S), hy+HH//2-int(1*S)), int(3*S))
+        pygame.draw.circle(surf, lighter(cfg['head'], 60), (cx-int(3*S), hy+HH//2-int(2*S)), int(1*S))
+        pygame.draw.circle(surf, lighter(cfg['head'], 60), (cx+int(5*S), hy+HH//2-int(2*S)), int(1*S))
+        # Pelo blanco escaso arriba
+        pygame.draw.arc(surf, (210,210,195), pygame.Rect(hx+int(3*S), hy, HW-int(6*S), HH//2),
                         0, math.pi, int(3*S))
 
     elif helmet == 'muerte':
-        # La Muerte Negra - calavera con capucha oscura
+        # ── La Muerte Negra: cilindro con capucha y cráneo ──
+        # Capucha oscura
         pygame.draw.ellipse(surf, (40,30,60),
-                            (cx-r-int(5*S), cy-r-int(8*S), (r+int(5*S))*2, r*2+int(12*S)))
-        # Cráneo
-        pygame.draw.circle(surf, (210, 210, 215), (cx, cy), r)
-        # Cuencas oculares (púrpura brillante)
-        pygame.draw.ellipse(surf, (80, 0, 100), (cx-r//2-int(2*S), cy-int(3*S), int(10*S), int(8*S)))
-        pygame.draw.ellipse(surf, (80, 0, 100), (cx+int(1*S),       cy-int(3*S), int(10*S), int(8*S)))
-        pygame.draw.ellipse(surf, PURPLE, (cx-r//2-int(1*S), cy-int(2*S), int(7*S), int(5*S)))
-        pygame.draw.ellipse(surf, PURPLE, (cx+int(2*S),       cy-int(2*S), int(7*S), int(5*S)))
-        pygame.draw.ellipse(surf, lighter(PURPLE,80), (cx-r//2, cy-int(1*S), int(4*S), int(3*S)))
-        pygame.draw.ellipse(surf, lighter(PURPLE,80), (cx+int(3*S), cy-int(1*S), int(4*S), int(3*S)))
-        # Mandíbula con dientes
+                            (hx-int(8*S), hy-int(10*S), HW+int(16*S), HH+int(16*S)))
+        # Cráneo cilíndrico
+        pygame.draw.rect(surf, (210, 210, 215), (hx, hy, HW, HH), border_radius=br)
+        pygame.draw.rect(surf, DARK_GREY, (hx, hy, HW, HH), 1, border_radius=br)
+        # Cuencas oculares
+        pygame.draw.ellipse(surf, (60, 0, 80), (hx+int(2*S), hy+int(3*S), int(10*S), int(8*S)))
+        pygame.draw.ellipse(surf, (60, 0, 80), (cx+int(1*S),  hy+int(3*S), int(10*S), int(8*S)))
+        pygame.draw.ellipse(surf, PURPLE, (hx+int(3*S), hy+int(4*S), int(7*S), int(5*S)))
+        pygame.draw.ellipse(surf, PURPLE, (cx+int(2*S),  hy+int(4*S), int(7*S), int(5*S)))
+        pygame.draw.ellipse(surf, lighter(PURPLE, 80), (hx+int(5*S), hy+int(5*S), int(3*S), int(3*S)))
+        pygame.draw.ellipse(surf, lighter(PURPLE, 80), (cx+int(4*S),  hy+int(5*S), int(3*S), int(3*S)))
+        # Dientes
         pygame.draw.line(surf, DARK_GREY,
-                         (cx-int(6*S), cy+r-int(3*S)), (cx+int(6*S), cy+r-int(3*S)), int(2*S))
+                         (cx-int(6*S), hy+HH-int(6*S)), (cx+int(6*S), hy+HH-int(6*S)), int(2*S))
         for i in range(-2, 3):
             pygame.draw.rect(surf, WHITE,
-                             (cx + i*int(3*S) - int(1*S), cy+r-int(3*S), int(2*S), int(4*S)))
-        # Guadaña (accesorio)
-        pygame.draw.line(surf, darker(GREY,20),
-                         (cx+r, cy-int(4*S)), (cx+r+int(8*S), cy-int(14*S)), int(2*S))
-        pygame.draw.ellipse(surf, GREY,
-                            (cx+r+int(4*S), cy-int(16*S), int(8*S), int(6*S)))
+                             (cx+i*int(3*S)-int(1*S), hy+HH-int(6*S), int(2*S), int(5*S)))
 
     else:
-        # Cabeza amarilla estándar
-        pygame.draw.circle(surf, cfg['head'], (cx, cy), r)
-        pygame.draw.circle(surf, darker(cfg['head'], 15), (cx, cy), r, 1)
-        # Ojos con brillo
-        pygame.draw.circle(surf, BLACK, (cx - int(4*S), cy - int(1*S)), int(2*S))
-        pygame.draw.circle(surf, BLACK, (cx + int(4*S), cy - int(1*S)), int(2*S))
-        pygame.draw.circle(surf, WHITE, (cx - int(3*S), cy - int(2*S)), int(1*S))
-        pygame.draw.circle(surf, WHITE, (cx + int(5*S), cy - int(2*S)), int(1*S))
-        # Sonrisa
+        # ── Cabeza CILÍNDRICA estándar (amarilla) — como la foto ──
+        # Cilindro: rect con esquinas muy ligeramente redondeadas
+        pygame.draw.rect(surf, cfg['head'], (hx, hy, HW, HH), border_radius=br)
+        pygame.draw.rect(surf, darker(cfg['head'], 20), (hx, hy, HW, HH), 1, border_radius=br)
+        # Cara: ojos (impresos en el cilindro)
+        eye_y = hy + HH // 2 - int(2*S)
+        pygame.draw.circle(surf, BLACK, (cx - int(4*S), eye_y), int(2*S))
+        pygame.draw.circle(surf, BLACK, (cx + int(4*S), eye_y), int(2*S))
+        pygame.draw.circle(surf, WHITE, (cx - int(3*S), eye_y - int(1*S)), int(1*S))
+        pygame.draw.circle(surf, WHITE, (cx + int(5*S), eye_y - int(1*S)), int(1*S))
+        # Cejas (rasgo del personaje)
+        if char_type == DARTH_VADER or char_type == MUERTE_NEGRA:
+            pygame.draw.line(surf, BLACK, (cx-int(6*S), eye_y-int(4*S)), (cx-int(1*S), eye_y-int(2*S)), int(2*S))
+            pygame.draw.line(surf, BLACK, (cx+int(6*S), eye_y-int(4*S)), (cx+int(1*S), eye_y-int(2*S)), int(2*S))
+        # Boca / sonrisa
         pygame.draw.arc(surf, BLACK,
-                        pygame.Rect(cx-int(4*S), cy, int(9*S), int(6*S)),
+                        pygame.Rect(cx-int(4*S), eye_y+int(3*S), int(9*S), int(5*S)),
                         math.pi, 0, int(1*S))
 
+        # Pelo encima (sobre el cilindro)
         if cfg.get('hair'):
             hair = cfg['hair']
-            pygame.draw.ellipse(surf, hair,
-                                (cx-r+int(1*S), cy-r, (r-int(1*S))*2, r))
+            # Pelo como bloque encima del cilindro
+            pygame.draw.rect(surf, hair,
+                             (hx+int(1*S), hy-int(5*S), HW-int(2*S), int(7*S)),
+                             border_radius=int(3*S))
             if char_type == LUKE:
                 # Flequillo
-                pygame.draw.ellipse(surf, hair,
-                                    (cx-r+int(2*S), cy-int(2*S), int(8*S), int(5*S)))
+                pygame.draw.rect(surf, hair,
+                                 (hx, hy+int(1*S), int(8*S), int(6*S)),
+                                 border_radius=int(2*S))
 
         if cfg.get('beard'):
             pygame.draw.ellipse(surf, cfg.get('hair', GREY),
-                                (cx-int(5*S), cy+r-int(4*S), int(10*S), int(6*S)))
+                                (cx-int(5*S), hy+HH-int(3*S), int(10*S), int(6*S)))
 
 
 # ──────────────────────────────────────────────────────

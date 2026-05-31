@@ -335,13 +335,14 @@ class Level1Scene:
         self.stars    = [(random.randint(0, self.LEVEL_W), random.randint(0, H))
                          for _ in range(200)]
         self._build_level()
-        self.next_scene   = None
+        self.next_scene    = None
         self.transition_timer = 0
-        self.build_anim   = 0
-        self.build_phase  = None
-        self.message      = ""
+        self.build_anim    = 0
+        self.build_phase   = None
+        self.message       = ""
         self.message_timer = 0
-        self.death_timer  = 0
+        self.death_timer   = 0
+        self.enemy_shots   = []   # lista de disparos de Stormtroopers activos
 
     def _build_level(self):
         plat_data = [
@@ -411,11 +412,31 @@ class Level1Scene:
         force_rect = self.player.get_force_rect()
 
         for e in self.enemies:
-            e.update(self.platforms, attack_rect, attack_id, force_rect)
+            e.update(self.platforms, attack_rect, attack_id, force_rect,
+                     player_cx=self.player.rect.centerx)
+            # Recoger studs soltados
             for s in e.stud_drop:
                 if s not in self.flying_studs:
                     self.flying_studs.append(s)
             e.stud_drop.clear()
+            # Recoger disparos nuevos
+            for shot in e.pending_shots:
+                self.enemy_shots.append(shot)
+            e.pending_shots.clear()
+
+        # ── Mover disparos de Stormtroopers ──
+        for shot in self.enemy_shots:
+            shot['x'] += shot['vx']
+        # Colisión disparo → jugador
+        if not self.player.dead:
+            for shot in self.enemy_shots[:]:
+                sr = pygame.Rect(int(shot['x'])-5, int(shot['y'])-5, 10, 10)
+                if sr.colliderect(self.player.rect):
+                    self.player._take_damage()
+                    self.enemy_shots.remove(shot)
+        # Eliminar disparos fuera del nivel
+        self.enemy_shots = [s for s in self.enemy_shots
+                            if 0 <= s['x'] <= self.LEVEL_W]
 
         for s in self.flying_studs:
             s.update(self.player)
@@ -461,11 +482,21 @@ class Level1Scene:
             if self.transition_timer <= 0:
                 return self.next_scene
 
-        # Muerte del jugador → reiniciar nivel
+        # Muerte del jugador → animación Lego y respawn (no reinicia el nivel)
         if self.player.dead:
-            self.death_timer += 1
-            if self.death_timer > 100:
-                return 'level1'
+            if self.player.death_timer > 80:
+                # Respawn estilo Lego: reaparece en la misma posición con HP lleno
+                self.player.dead = False
+                self.player.death_timer = 0
+                self.player.hp = self.player.max_hp
+                self.player.rect.x = self.player.last_safe_x
+                self.player.rect.y = 300
+                self.player.vy = 0
+                self.player.inv_timer = 120
+                # Penalización de studs
+                penalty = min(self.player.studs, 200)
+                self.player.studs -= penalty
+                self._show_message(f"¡Resucitado! -{penalty} studs")
 
         return None
 
@@ -490,6 +521,17 @@ class Level1Scene:
 
         for s in self.flying_studs:
             s.draw(surf, int(self.cam_x))
+
+        # Disparos de Stormtroopers (rayos rojos)
+        for shot in self.enemy_shots:
+            sx2 = int(shot['x'] - self.cam_x)
+            sy2 = int(shot['y'])
+            pygame.draw.circle(surf, RED,   (sx2, sy2), 5)
+            pygame.draw.circle(surf, (255,140,140), (sx2, sy2), 3)
+            pygame.draw.circle(surf, WHITE, (sx2, sy2), 1)
+            # Cola del disparo
+            tail_x = sx2 - int(shot['vx'] * 4)
+            pygame.draw.line(surf, (200, 50, 50), (sx2, sy2), (tail_x, sy2), 3)
 
         self.player.draw(surf, int(self.cam_x))
 

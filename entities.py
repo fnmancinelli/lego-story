@@ -31,17 +31,19 @@ class Player:
         self.direction = 1
         self.state = 'idle'
         self.frame = 0
-        self.hp = 3
-        self.max_hp = 3
+        self.hp = 5
+        self.max_hp = 5
         self.attack_timer = 0
-        self.attack_id = 0          # incrementa con cada ataque nuevo
-        self.force_timer = 0        # cooldown de la Fuerza
-        self.force_active = 0       # frames que la onda de Fuerza está activa
+        self.attack_id = 0
+        self.force_timer = 0
+        self.force_active = 0
         self.inv_timer = 0
         self.pieces = 0
         self.studs = 0
         self.gold_bricks = 0
         self.dead = False
+        self.death_timer = 0        # frames desde que murió (animación Lego)
+        self.last_safe_x = x        # última posición segura para respawn
 
     def handle_input(self, keys):
         if self.dead:
@@ -72,6 +74,7 @@ class Player:
 
     def update(self, platforms):
         if self.dead:
+            self.death_timer += 1
             return
 
         self.vy += GRAVITY
@@ -87,12 +90,16 @@ class Player:
         # Caída al vacío → daño y reaparecer
         if self.rect.top > H + 60:
             self._take_damage()
-            self.rect.x = max(60, self.rect.x - 200)
+            self.rect.x = self.last_safe_x
             self.rect.y = 300
             self.vy = 0
 
         if self.rect.left < 0:
             self.rect.left = 0
+
+        # Guardar última posición segura (cuando está en suelo)
+        if self.on_ground and not self.dead:
+            self.last_safe_x = self.rect.x
 
         self.frame += 1
 
@@ -159,6 +166,7 @@ class Player:
         self.inv_timer = 90
         if self.hp <= 0:
             self.dead = True
+            self.death_timer = 0
 
     def collect_piece(self, piece):
         self.pieces += 1
@@ -172,10 +180,22 @@ class Player:
         self.studs += value
 
     def draw(self, surf, cam_x):
-        if self.dead:
-            return
         screen_x = self.rect.centerx - cam_x
         screen_y = self.rect.bottom
+
+        if self.dead:
+            # Animación de muerte estilo Lego: piezas volando
+            if self.death_timer < 60:
+                for i in range(8):
+                    angle = i * 45 + self.death_timer * 4
+                    dist  = self.death_timer * 2
+                    px = screen_x + int(math.cos(math.radians(angle)) * dist)
+                    py = screen_y - 30 + int(math.sin(math.radians(angle)) * dist)
+                    c = [YELLOW, TAN, BROWN, BLUE, RED, DARK_GREY, WHITE, ORANGE][i]
+                    sz = max(3, 8 - self.death_timer // 8)
+                    pygame.draw.rect(surf, c, (px - sz//2, py - sz//2, sz, sz), border_radius=1)
+                    pygame.draw.rect(surf, lighter(c, 40), (px - sz//2, py - sz//2, sz, sz), 1)
+            return
 
         # Parpadeo al recibir daño
         if self.inv_timer > 0 and (self.inv_timer // 6) % 2 == 0:
@@ -221,11 +241,13 @@ class Stormtrooper:
         self.death_timer = 0
         self.stud_drop = []
         self.hit_flash = 0
-        self.hit_inv_timer = 0      # invencibilidad post-golpe
-        self.last_hit_attack_id = -1  # evita doble-hit en el mismo swing
-        self.push_vx = 0.0         # empuje de la Fuerza
+        self.hit_inv_timer = 0
+        self.last_hit_attack_id = -1
+        self.push_vx = 0.0
+        self.blaster_cd = random.randint(60, 130)  # disparo blaster
+        self.pending_shots = []                     # disparos pendientes
 
-    def update(self, platforms, attack_rect, attack_id, force_rect):
+    def update(self, platforms, attack_rect, attack_id, force_rect, player_cx=None):
         if not self.alive:
             self.death_timer += 1
             return
@@ -255,8 +277,24 @@ class Stormtrooper:
         self.frame += 1
         self.state = 'walk'
 
-        if self.hit_flash   > 0: self.hit_flash   -= 1
+        if self.hit_flash     > 0: self.hit_flash     -= 1
         if self.hit_inv_timer > 0: self.hit_inv_timer -= 1
+
+        # ── DISPARO BLASTER hacia el jugador ──
+        self.blaster_cd -= 1
+        if self.blaster_cd <= 0:
+            self.blaster_cd = random.randint(80, 160)
+            # Apuntar al jugador si conocemos su posición
+            if player_cx is not None:
+                shot_dir = 1 if player_cx > self.rect.centerx else -1
+                self.direction = shot_dir
+            else:
+                shot_dir = self.direction
+            self.pending_shots.append({
+                'x': float(self.rect.centerx),
+                'y': float(self.rect.centery - 10),
+                'vx': shot_dir * 7.0,
+            })
 
         # Recibir golpe de sable
         if (attack_rect is not None
@@ -327,15 +365,15 @@ class Stormtrooper:
             flash.fill((255, 255, 255, 130))
             surf.blit(flash, (sx - self.rect.w//2 - 5, sy - self.rect.h))
 
-        # Barra de vida sobre el enemigo
-        bw = 24
+        # Barra de vida — bien por encima del personaje
+        bw = 28
         bx = sx - bw//2
-        by = sy - self.rect.h - 8
-        pygame.draw.rect(surf, DARK_GREY, (bx, by, bw, 4))
-        fill = int(bw * self.hp / 2)
+        bar_y = sy - self.rect.h - 22   # 22px por encima de la cabeza
+        pygame.draw.rect(surf, DARK_GREY, (bx, bar_y, bw, 5), border_radius=2)
+        fill = int(bw * max(0, self.hp) / 2)
         if fill > 0:
-            pygame.draw.rect(surf, RED, (bx, by, fill, 4))
-        pygame.draw.rect(surf, GREY, (bx, by, bw, 4), 1)
+            pygame.draw.rect(surf, RED, (bx, bar_y, fill, 5), border_radius=2)
+        pygame.draw.rect(surf, GREY, (bx, bar_y, bw, 5), 1, border_radius=2)
 
 
 class LegoPiece:
